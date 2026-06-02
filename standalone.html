@@ -1,0 +1,958 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grammar &amp; Writing Enhancer (Standalone)</title>
+<style>
+  :root {
+    --bg: #0f1220; --panel: #181c2e; --panel-2: #1f243a; --border: #2a2f4a;
+    --text: #e7e9f2; --muted: #9aa0bd; --accent: #7c5cff; --accent-2: #4cc9f0;
+    --err: #ff6b6b; --warn: #ffb84c; --style: #4cc9f0; --ok: #4ade80;
+    --shadow: 0 6px 24px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:linear-gradient(160deg,#0c0f1d,#14182c); color:var(--text);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  a { color: var(--accent-2); }
+  header { padding: 18px 28px 6px; }
+  header h1 { margin:0; font-size:22px; background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  header .subtitle { margin:4px 0 0; color:var(--muted); font-size:13px; }
+
+  main { display:grid; grid-template-columns: 1fr 380px; gap:16px; padding:16px 24px;
+    height: calc(100vh - 110px); min-height: 480px; }
+
+  .editor-pane, .sidebar { background:var(--panel); border:1px solid var(--border);
+    border-radius:12px; box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column; }
+
+  .toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 14px;
+    border-bottom:1px solid var(--border); background:var(--panel-2); }
+
+  button { background:var(--panel); color:var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:7px 12px; font-size:13px; cursor:pointer; transition:.15s; }
+  button:hover { background:#232847; }
+  button.primary { background:linear-gradient(90deg,var(--accent),#5b8cff); border-color:transparent;
+    color:white; font-weight:600; }
+  button.primary:hover { filter:brightness(1.1); }
+  button.full { width:100%; }
+  select { background:var(--panel); color:var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:6px 10px; font-size:13px; }
+  .switch { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted);
+    cursor:pointer; user-select:none; }
+  .switch input { accent-color: var(--accent); }
+  .status { margin-left:auto; font-size:12px; color:var(--muted); min-height:1em; }
+  .status.error { color:var(--err); } .status.ok { color:var(--ok); }
+
+  .editor-wrap { position:relative; flex:1; overflow:hidden; }
+  #editor, .highlights { position:absolute; inset:0; margin:0; padding:18px 22px;
+    font:16px/1.65 ui-monospace,SFMono-Regular,"Cascadia Code",Consolas,monospace;
+    white-space:pre-wrap; word-wrap:break-word; overflow:auto; }
+  #editor { background:transparent; color:var(--text); border:none; resize:none; outline:none;
+    z-index:2; caret-color:var(--accent-2); }
+  .highlights { z-index:1; color:transparent; pointer-events:none; }
+  .highlights mark { border-radius:3px; padding:0; background:transparent;
+    border-bottom:2px solid var(--warn); color:transparent; }
+  .highlights mark.err { border-bottom-color:var(--err); background:rgba(255,107,107,.10); }
+  .highlights mark.warn { border-bottom-color:var(--warn); background:rgba(255,184,76,.10); }
+  .highlights mark.style { border-bottom-color:var(--style); background:rgba(76,201,240,.10); }
+
+  .metrics { display:flex; flex-wrap:wrap; gap:14px; padding:10px 16px; border-top:1px solid var(--border);
+    background:var(--panel-2); font-size:12.5px; color:var(--muted); }
+  .metric b { color:var(--text); margin-right:4px; }
+
+  .tabs { display:flex; border-bottom:1px solid var(--border); background:var(--panel-2); }
+  .tab { flex:1; border:none; background:transparent; border-radius:0; padding:12px; font-weight:600;
+    color:var(--muted); border-bottom:2px solid transparent; }
+  .tab.active { color:var(--text); border-bottom-color:var(--accent); }
+  .badge { display:inline-block; min-width:22px; margin-left:6px; padding:1px 7px; border-radius:999px;
+    background:var(--panel); border:1px solid var(--border); font-size:11px; color:var(--text); }
+
+  .suggestions { flex:1; overflow:auto; padding:10px; }
+  .suggestions.hidden { display:none; }
+
+  .suggestion { padding:10px 12px; margin-bottom:8px; border:1px solid var(--border);
+    border-left:3px solid var(--warn); border-radius:8px; background:var(--panel-2); cursor:pointer;
+    transition:.15s; }
+  .suggestion:hover { background:#242947; }
+  .suggestion.err { border-left-color:var(--err); }
+  .suggestion.warn { border-left-color:var(--warn); }
+  .suggestion.style { border-left-color:var(--style); }
+  .suggestion .cat { display:inline-block; font-size:10.5px; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin-bottom:4px; }
+  .suggestion .msg { font-size:13.5px; line-height:1.45; }
+  .suggestion .orig { display:inline-block; margin-top:6px; padding:2px 6px;
+    background:rgba(255,107,107,.12); border-radius:4px;
+    font-family:ui-monospace,monospace; font-size:12px; }
+  .suggestion .repls { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; }
+  .suggestion .repl { font-size:12px; padding:3px 9px; background:var(--panel);
+    border:1px solid var(--border); border-radius:999px; cursor:pointer; }
+  .suggestion .repl:hover { background:var(--accent); color:white; border-color:var(--accent); }
+
+  .empty { text-align:center; color:var(--muted); padding:30px 16px; font-size:13px; }
+  .empty .ok-icon { font-size:32px; display:block; margin-bottom:8px; }
+
+  .style-bar { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .style-btn { font-size:12px; padding:5px 10px; border-radius:999px; }
+  .style-btn.active { background:var(--accent); border-color:var(--accent); color:white; }
+  .hint { font-size:12px; color:var(--muted); margin:8px 2px 12px; }
+  .rephrase-card { padding:12px 14px; margin-bottom:10px; border:1px solid var(--border);
+    border-left:3px solid var(--accent-2); border-radius:8px; background:var(--panel-2); }
+  .rephrase-card.err { border-left-color:var(--err); }
+  .rephrase-card.unchanged { border-left-color:var(--warn); opacity:.85; }
+  .rephrase-card .style-label { display:inline-block; font-size:10.5px; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--muted); margin-bottom:6px; }
+  .rephrase-card .text { font-size:14px; line-height:1.55; white-space:pre-wrap; }
+  .rephrase-card .actions { display:flex; gap:6px; margin-top:8px; }
+  .rephrase-card .actions button { font-size:12px; padding:4px 10px; }
+  .spinner { text-align:center; padding:18px; color:var(--muted); font-size:13px; }
+
+  .popup { position:fixed; z-index:100; min-width:220px; max-width:320px;
+    background:var(--panel-2); border:1px solid var(--border); border-radius:10px;
+    box-shadow:var(--shadow); overflow:hidden; }
+  .popup.hidden { display:none; }
+  .popup-head { display:flex; align-items:center; justify-content:space-between;
+    padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--border); font-weight:600; }
+  .popup-head button { background:transparent; border:none; color:var(--muted); font-size:18px;
+    cursor:pointer; padding:0 4px; }
+  .popup-body { padding:10px 12px; max-height:280px; overflow:auto; }
+  .popup-body .group-label { display:block; font-size:10.5px; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin:6px 0 4px; }
+  .popup-body .syn-chip { display:inline-block; margin:2px 4px 2px 0; padding:3px 9px;
+    background:var(--panel); border:1px solid var(--border); border-radius:999px;
+    font-size:12px; cursor:pointer; }
+  .popup-body .syn-chip:hover { background:var(--accent); border-color:var(--accent); color:white; }
+  .popup-body .syn-empty { color:var(--muted); font-size:12.5px; }
+
+  /* Hover tooltip for grammar/style underlines */
+  .tooltip { position:fixed; z-index:200; max-width:340px; padding:10px 12px;
+    background:#0b0e1a; border:1px solid var(--border); border-radius:10px;
+    box-shadow:var(--shadow); font-size:12.5px; line-height:1.45;
+    pointer-events:auto; }
+  .tooltip.hidden { display:none; }
+  .tooltip .tt-cat { display:inline-block; font-size:10px; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin-bottom:4px; }
+  .tooltip .tt-msg { color:var(--text); }
+  .tooltip .tt-repls { margin-top:8px; display:flex; flex-wrap:wrap; gap:5px; }
+  .tooltip .tt-repl { font-size:11.5px; padding:2px 8px; background:var(--panel);
+    border:1px solid var(--border); border-radius:999px; cursor:pointer; }
+  .tooltip .tt-repl:hover { background:var(--accent); border-color:var(--accent); color:white; }
+  .tooltip.err   { border-left:3px solid var(--err); }
+  .tooltip.warn  { border-left:3px solid var(--warn); }
+  .tooltip.style { border-left:3px solid var(--style); }
+
+  footer { padding:6px 28px 14px; color:var(--muted); font-size:11.5px; text-align:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Grammar &amp; Writing Enhancer <small style="font-size:12px;color:var(--muted);font-weight:400;">· standalone</small></h1>
+  <p class="subtitle">
+    Single-file app. No server. Uses open APIs:
+    <a href="https://languagetool.org/" target="_blank" rel="noopener">LanguageTool</a>,
+    <a href="https://mymemory.translated.net/" target="_blank" rel="noopener">MyMemory</a>,
+    <a href="https://www.datamuse.com/api/" target="_blank" rel="noopener">Datamuse</a>.
+  </p>
+</header>
+
+<main>
+  <section class="editor-pane">
+    <div class="toolbar">
+      <button id="checkBtn" class="primary">Check now</button>
+      <label class="switch"><input type="checkbox" id="autoCheck" checked /> <span>Auto-check while typing</span></label>
+      <label class="switch"><input type="checkbox" id="picky" checked /> <span>Picky mode</span></label>
+      <select id="language" title="Language">
+        <option value="en-US" selected>English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="en-IN">English (India)</option>
+        <option value="en-AU">English (AU)</option>
+        <option value="en-CA">English (CA)</option>
+      </select>
+      <button id="clearBtn">Clear</button>
+      <button id="engineBtn" title="Change grammar engine">Engine: Public</button>
+      <span id="status" class="status"></span>
+    </div>
+    <div class="editor-wrap">
+      <div id="highlights" class="highlights" aria-hidden="true"></div>
+      <textarea id="editor" placeholder="Paste or type any English text here. Double-click a word for synonyms." spellcheck="false"></textarea>
+    </div>
+    <div class="metrics">
+      <span class="metric"><b id="m-words">0</b> words</span>
+      <span class="metric"><b id="m-sent">0</b> sentences</span>
+      <span class="metric"><b id="m-avg">0</b> avg w/s</span>
+      <span class="metric"><b id="m-ease">0</b> reading ease</span>
+      <span class="metric"><b id="m-grade">0</b> grade level</span>
+      <span class="metric" id="m-level">—</span>
+    </div>
+  </section>
+
+  <aside class="sidebar">
+    <div class="tabs">
+      <button class="tab active" data-tab="grammar">Grammar <span id="grammarCount" class="badge">0</span></button>
+      <button class="tab" data-tab="style">Style <span id="styleCount" class="badge">0</span></button>
+      <button class="tab" data-tab="rephrase">Rephrase</button>
+    </div>
+    <div id="grammarList" class="suggestions"></div>
+    <div id="styleList" class="suggestions hidden"></div>
+    <div id="rephrasePanel" class="suggestions hidden">
+      <div class="style-bar">
+        <button class="style-btn active" data-style="standard">Standard</button>
+        <button class="style-btn" data-style="fluent">Fluent</button>
+        <button class="style-btn" data-style="formal">Formal</button>
+        <button class="style-btn" data-style="simple">Simple</button>
+        <button class="style-btn" data-style="creative">Creative</button>
+      </div>
+      <button id="rephraseBtn" class="primary full">Rephrase selection or full text</button>
+      <p class="hint">Select text first, or leave nothing selected to rephrase the whole editor. Double-click a word for synonyms.</p>
+      <div id="rephraseResults"></div>
+    </div>
+  </aside>
+</main>
+
+<div id="synonymPopup" class="popup hidden">
+  <div class="popup-head"><span id="popupWord"></span><button id="popupClose" title="Close">×</button></div>
+  <div id="popupBody" class="popup-body">Loading…</div>
+</div>
+
+<div id="tooltip" class="tooltip hidden"></div>
+
+<footer>
+  <small>Single-file build. No backend. Style + readability run locally; grammar / rephrase / synonyms call open APIs over HTTPS.</small>
+</footer>
+
+<script>
+// ============================================================================
+// DOM refs
+// ============================================================================
+const editor = document.getElementById("editor");
+const highlights = document.getElementById("highlights");
+const checkBtn = document.getElementById("checkBtn");
+const clearBtn = document.getElementById("clearBtn");
+const autoCheck = document.getElementById("autoCheck");
+const pickyCb = document.getElementById("picky");
+const langSel = document.getElementById("language");
+const statusEl = document.getElementById("status");
+const grammarList = document.getElementById("grammarList");
+const styleList = document.getElementById("styleList");
+const grammarCount = document.getElementById("grammarCount");
+const styleCount = document.getElementById("styleCount");
+const mWords = document.getElementById("m-words");
+const mSent = document.getElementById("m-sent");
+const mAvg = document.getElementById("m-avg");
+const mEase = document.getElementById("m-ease");
+const mGrade = document.getElementById("m-grade");
+const mLevel = document.getElementById("m-level");
+const rephrasePanel = document.getElementById("rephrasePanel");
+const rephraseBtn = document.getElementById("rephraseBtn");
+const rephraseResults = document.getElementById("rephraseResults");
+const styleBtns = document.querySelectorAll(".style-btn");
+const synonymPopup = document.getElementById("synonymPopup");
+const popupWord = document.getElementById("popupWord");
+const popupBody = document.getElementById("popupBody");
+const popupClose = document.getElementById("popupClose");
+const tooltip = document.getElementById("tooltip");
+
+const state = { grammar: [], style: [] };
+const activeStyles = new Set(["standard"]);
+
+// ============================================================================
+// Endpoints (all CORS-enabled)
+// ============================================================================
+const LT_PUBLIC = "https://api.languagetool.org/v2/check";
+const LT_LOCAL_DEFAULT = "http://localhost:8081/v2/check";
+const MM_URL = "https://api.mymemory.translated.net/get";
+const DM_URL = "https://api.datamuse.com/words";
+
+// Engine config persisted in localStorage
+let ltConfig = (() => {
+  try { return JSON.parse(localStorage.getItem("ltConfig")) || {}; }
+  catch { return {}; }
+})();
+function ltUrl() {
+  if (ltConfig.mode === "local") return ltConfig.url || LT_LOCAL_DEFAULT;
+  return LT_PUBLIC;
+}
+function refreshEngineButton() {
+  const btn = document.getElementById("engineBtn");
+  if (!btn) return;
+  btn.textContent = "Engine: " + (ltConfig.mode === "local" ? "Local" : "Public");
+  btn.title = ltConfig.mode === "local"
+    ? `Local LanguageTool: ${ltConfig.url || LT_LOCAL_DEFAULT}`
+    : "Free public LanguageTool API (20 req/min limit)";
+}
+
+// ============================================================================
+// Tabs
+// ============================================================================
+document.querySelectorAll(".tab").forEach((t) => {
+  t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+    t.classList.add("active");
+    const w = t.dataset.tab;
+    grammarList.classList.toggle("hidden", w !== "grammar");
+    styleList.classList.toggle("hidden", w !== "style");
+    rephrasePanel.classList.toggle("hidden", w !== "rephrase");
+  });
+});
+
+// ============================================================================
+// Helpers
+// ============================================================================
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function severityFor(m) {
+  if (m._kind === "style") return "style";
+  const t = (m.issueType || "").toLowerCase();
+  if (t === "misspelling" || t === "grammar") return "err";
+  return "warn";
+}
+editor.addEventListener("scroll", () => {
+  highlights.scrollTop = editor.scrollTop;
+  highlights.scrollLeft = editor.scrollLeft;
+});
+
+function renderHighlights(text, items) {
+  const ranges = items
+    .map((m) => ({ start: m.offset, end: m.offset + m.length, cls: severityFor(m) }))
+    .filter((r) => r.end > r.start && r.start >= 0 && r.end <= text.length)
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+
+  const accepted = [];
+  let cursor = -1;
+  for (const r of ranges) {
+    if (r.start >= cursor) { accepted.push(r); cursor = r.end; }
+  }
+  let html = "", pos = 0;
+  for (const r of accepted) {
+    html += escapeHtml(text.slice(pos, r.start));
+    html += `<mark class="${r.cls}">${escapeHtml(text.slice(r.start, r.end))}</mark>`;
+    pos = r.end;
+  }
+  highlights.innerHTML = html + escapeHtml(text.slice(pos)) + "\n";
+}
+
+function applyReplacement(offset, length, value) {
+  editor.value = editor.value.slice(0, offset) + value + editor.value.slice(offset + length);
+  editor.focus();
+  editor.selectionStart = editor.selectionEnd = offset + value.length;
+  scheduleCheck(50);
+}
+
+function renderSuggestionList(target, items, opts) {
+  target.innerHTML = "";
+  if (!items.length) {
+    target.innerHTML = `<div class="empty"><span class="ok-icon">✓</span>${opts.emptyMsg}</div>`;
+    return;
+  }
+  for (const m of items) {
+    const card = document.createElement("div");
+    card.className = `suggestion ${severityFor(m)}`;
+    const orig = editor.value.slice(m.offset, m.offset + m.length);
+    const repls = (m.replacements || []).map(
+      (r) => `<span class="repl" data-r="${escapeHtml(r)}">${escapeHtml(r)}</span>`
+    ).join("");
+    card.innerHTML = `
+      <div class="cat">${escapeHtml(m.category || m.type || "issue")}</div>
+      <div class="msg">${escapeHtml(m.message || "")}</div>
+      ${orig ? `<div class="orig">${escapeHtml(orig)}</div>` : ""}
+      ${repls ? `<div class="repls">${repls}</div>` : ""}
+    `;
+    card.addEventListener("click", (e) => {
+      const chip = e.target.closest(".repl");
+      if (chip) { applyReplacement(m.offset, m.length, chip.dataset.r); return; }
+      editor.focus();
+      editor.setSelectionRange(m.offset, m.offset + m.length);
+    });
+    target.appendChild(card);
+  }
+}
+
+// ============================================================================
+// Local style heuristics (ported from Python)
+// ============================================================================
+const WEASEL = ["many","various","very","fairly","several","extremely","exceedingly","quite",
+  "remarkably","few","surprisingly","mostly","largely","huge","tiny","excellent",
+  "interestingly","really","actually","basically","literally","just","perhaps","maybe","somewhat"];
+const WORDY = {
+  "a large number of":"many","a majority of":"most","a number of":"several",
+  "at this point in time":"now","due to the fact that":"because","in order to":"to",
+  "in spite of the fact that":"although","in the event that":"if",
+  "in the process of":"(omit)","it is important to note that":"(omit)",
+  "the fact that":"that","with regard to":"about","with the exception of":"except",
+  "for the purpose of":"for","on a regular basis":"regularly","in close proximity to":"near",
+  "make a decision":"decide","give consideration to":"consider","has the ability to":"can",
+  "is able to":"can"
+};
+const PASSIVE_RE = /\b(?:am|is|are|was|were|be|been|being|got|gotten)\s+(?:\w+ly\s+)?(\w+ed|known|done|made|said|seen|gone|taken|given|written|shown|held|kept|brought|thought|told|left)\b/gi;
+const ADVERB_RE = /\b([A-Za-z]{4,}ly)\b/g;
+const ADVERB_OK = new Set(["early","only","family","reply","supply","apply","imply","comply","rely","july","italy","holy","ugly","silly","jelly","ally","assembly","anomaly","monopoly"]);
+const SENT_SPLIT = /(?<=[.!?])\s+(?=[A-Z"'])/;
+
+function runStyleChecks(text) {
+  const out = [];
+  const lower = text.toLowerCase();
+  for (const phrase in WORDY) {
+    const re = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g");
+    let m;
+    while ((m = re.exec(lower)) !== null) {
+      const r = WORDY[phrase];
+      out.push({ type:"wordy", offset:m.index, length:phrase.length,
+        message:`Wordy phrase — consider “${r}”.`,
+        replacements: r === "(omit)" ? [] : [r] });
+    }
+  }
+  for (const w of WEASEL) {
+    const re = new RegExp(`\\b${w}\\b`, "gi");
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      out.push({ type:"weasel", offset:m.index, length:w.length,
+        message:`“${w}” is vague filler — consider removing or replacing.`, replacements:[] });
+    }
+  }
+  let m;
+  PASSIVE_RE.lastIndex = 0;
+  while ((m = PASSIVE_RE.exec(text)) !== null) {
+    out.push({ type:"passive", offset:m.index, length:m[0].length,
+      message:"Passive voice — rewrite in active voice for clarity.", replacements:[] });
+  }
+  ADVERB_RE.lastIndex = 0;
+  while ((m = ADVERB_RE.exec(text)) !== null) {
+    if (ADVERB_OK.has(m[1].toLowerCase())) continue;
+    out.push({ type:"adverb", offset:m.index, length:m[1].length,
+      message:`Adverb “${m[1]}” — strong verbs often work better.`, replacements:[] });
+  }
+  let pos = 0;
+  for (const s of text.split(SENT_SPLIT)) {
+    const wc = s.trim().split(/\s+/).filter(Boolean).length;
+    if (wc >= 25) {
+      out.push({ type:"long-sentence", offset:pos, length:s.length,
+        message:`Long sentence (${wc} words) — consider splitting.`, replacements:[] });
+    }
+    pos += s.length + 1;
+  }
+  out.sort((a,b) => a.offset - b.offset || a.length - b.length);
+  return out;
+}
+
+// ============================================================================
+// Readability
+// ============================================================================
+function countSyllables(word) {
+  word = word.toLowerCase().replace(/[^a-z]/g, "");
+  if (!word) return 0;
+  let count = 0, prev = false;
+  for (const c of word) {
+    const v = "aeiouy".includes(c);
+    if (v && !prev) count++;
+    prev = v;
+  }
+  if (word.endsWith("e") && count > 1) count--;
+  return Math.max(count, 1);
+}
+
+function computeMetrics(text) {
+  const words = (text.match(/\b[\w']+\b/g) || []);
+  const sentences = text.trim().split(SENT_SPLIT).filter((s) => s.trim());
+  const syl = words.reduce((s, w) => s + countSyllables(w), 0);
+  if (!words.length || !sentences.length) {
+    return { words:words.length, sentences:sentences.length,
+      avgWordsPerSentence:0, fleschReadingEase:0, fleschKincaidGrade:0, readingLevel:"—" };
+  }
+  const aw = words.length / sentences.length;
+  const asw = syl / words.length;
+  const flesch = 206.835 - 1.015 * aw - 84.6 * asw;
+  const fk = 0.39 * aw + 11.8 * asw - 15.59;
+  let level;
+  if (flesch >= 90) level = "Very easy (5th grade)";
+  else if (flesch >= 80) level = "Easy (6th grade)";
+  else if (flesch >= 70) level = "Fairly easy (7th grade)";
+  else if (flesch >= 60) level = "Plain English (8th–9th)";
+  else if (flesch >= 50) level = "Fairly difficult (10th–12th)";
+  else if (flesch >= 30) level = "Difficult (college)";
+  else level = "Very difficult (college grad)";
+  return {
+    words: words.length, sentences: sentences.length,
+    avgWordsPerSentence: Math.round(aw * 10) / 10,
+    fleschReadingEase: Math.round(flesch * 10) / 10,
+    fleschKincaidGrade: Math.round(fk * 10) / 10,
+    readingLevel: level,
+  };
+}
+
+function renderMetrics(m) {
+  mWords.textContent = m.words ?? 0;
+  mSent.textContent = m.sentences ?? 0;
+  mAvg.textContent = m.avgWordsPerSentence ?? 0;
+  mEase.textContent = m.fleschReadingEase ?? 0;
+  mGrade.textContent = m.fleschKincaidGrade ?? 0;
+  mLevel.textContent = m.readingLevel ?? "—";
+}
+
+// ============================================================================
+// LanguageTool grammar (browser -> public CORS-enabled API)
+// ============================================================================
+async function checkGrammar(text, language, picky) {
+  const params = new URLSearchParams();
+  params.set("text", text);
+  params.set("language", language);
+  params.set("enabledOnly", "false");
+  if (picky) params.set("level", "picky");
+  const res = await fetch(ltUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+    body: params.toString(),
+  });
+  if (!res.ok) throw new Error(`LanguageTool error ${res.status}`);
+  const data = await res.json();
+  return (data.matches || []).map((m) => ({
+    message: m.message,
+    offset: m.offset,
+    length: m.length,
+    replacements: (m.replacements || []).slice(0, 6).map((r) => r.value),
+    category: m.rule?.category?.name,
+    issueType: m.rule?.issueType || "misspelling",
+  }));
+}
+
+// ============================================================================
+// Check pipeline
+// ============================================================================
+async function runCheck() {
+  const text = editor.value;
+  if (!text.trim()) {
+    state.grammar = []; state.style = [];
+    renderHighlights("", []);
+    renderSuggestionList(grammarList, [], { emptyMsg: "No text to check." });
+    renderSuggestionList(styleList, [], { emptyMsg: "No text to check." });
+    renderMetrics({});
+    grammarCount.textContent = "0"; styleCount.textContent = "0";
+    statusEl.textContent = ""; return;
+  }
+  statusEl.textContent = "Checking…"; statusEl.className = "status";
+
+  // Style + metrics are local and instant
+  state.style = runStyleChecks(text).map((s) => ({ ...s, _kind: "style" }));
+  renderMetrics(computeMetrics(text));
+
+  try {
+    state.grammar = await checkGrammar(text, langSel.value, pickyCb.checked);
+    statusEl.textContent = `Checked · ${langSel.value}`;
+    statusEl.className = "status ok";
+  } catch (err) {
+    state.grammar = [];
+    statusEl.textContent = `Grammar API failed: ${err.message}`;
+    statusEl.className = "status error";
+  }
+
+  renderHighlights(text, [...state.grammar, ...state.style]);
+  renderSuggestionList(grammarList, state.grammar, { emptyMsg: "No grammar or spelling issues found." });
+  renderSuggestionList(styleList, state.style, { emptyMsg: "No style suggestions — looks tight!" });
+  grammarCount.textContent = state.grammar.length;
+  styleCount.textContent = state.style.length;
+  rebuildIssueIndex();
+}
+
+let debounceTimer = null;
+function scheduleCheck(delay = 900) {
+  if (!autoCheck.checked) return;
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(runCheck, delay);
+}
+
+editor.addEventListener("input", () => {
+  renderHighlights(editor.value, [...state.grammar, ...state.style].filter(
+    (m) => m.offset + m.length <= editor.value.length
+  ));
+  scheduleCheck();
+});
+checkBtn.addEventListener("click", () => runCheck());
+clearBtn.addEventListener("click", () => { editor.value = ""; runCheck(); });
+pickyCb.addEventListener("change", () => editor.value && runCheck());
+langSel.addEventListener("change", () => editor.value && runCheck());
+
+// ============================================================================
+// Rephrase — browser back-translation via MyMemory
+// ============================================================================
+const STYLES = {
+  standard: { pivots:["fr"],       post:null,     label:"Standard" },
+  fluent:   { pivots:["de"],       post:null,     label:"Fluent" },
+  formal:   { pivots:["it"],       post:"formal", label:"Formal" },
+  simple:   { pivots:["es"],       post:"simple", label:"Simple" },
+  creative: { pivots:["pt","nl"],  post:null,     label:"Creative" },
+};
+const FORMAL_EXPANSIONS = {
+  "can't":"cannot","won't":"will not","shan't":"shall not","don't":"do not","doesn't":"does not",
+  "didn't":"did not","isn't":"is not","aren't":"are not","wasn't":"was not","weren't":"were not",
+  "hasn't":"has not","haven't":"have not","hadn't":"had not","wouldn't":"would not",
+  "shouldn't":"should not","couldn't":"could not","mightn't":"might not","mustn't":"must not",
+  "i'm":"I am","you're":"you are","we're":"we are","they're":"they are","he's":"he is",
+  "she's":"she is","it's":"it is","that's":"that is","what's":"what is","i'll":"I will",
+  "you'll":"you will","we'll":"we will","they'll":"they will","i'd":"I would","you'd":"you would",
+  "i've":"I have","you've":"you have","we've":"we have","they've":"they have",
+  "gonna":"going to","wanna":"want to","kinda":"kind of","sorta":"sort of",
+};
+const SIMPLE_SWAPS = {
+  "utilize":"use","utilized":"used","utilization":"use","commence":"start","commenced":"started",
+  "terminate":"end","terminated":"ended","endeavor":"try","assist":"help","assistance":"help",
+  "demonstrate":"show","subsequently":"later","nevertheless":"still","therefore":"so",
+  "accordingly":"so","regarding":"about","numerous":"many","sufficient":"enough",
+  "obtain":"get","purchase":"buy","facilitate":"help","implement":"do",
+  "approximately":"about","consequently":"so",
+};
+
+async function translate(text, source, target) {
+  const url = `${MM_URL}?q=${encodeURIComponent(text)}&langpair=${source}|${target}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`MyMemory ${res.status}`);
+  const data = await res.json();
+  const out = (data.responseData?.translatedText || "").trim();
+  if (!out || /^MYMEMORY WARNING|^QUERY LENGTH/i.test(out)) {
+    throw new Error(data.responseDetails || "Empty translation");
+  }
+  return out;
+}
+async function backTranslate(text, pivots) {
+  let cur = text, src = "en";
+  for (const p of pivots) { cur = await translate(cur, src, p); src = p; }
+  return await translate(cur, src, "en");
+}
+function applyStylePost(text, mode) {
+  if (mode === "formal") {
+    for (const [k, v] of Object.entries(FORMAL_EXPANSIONS)) {
+      text = text.replace(new RegExp(`\\b${k.replace(/'/g, "['’]")}\\b`, "gi"), v);
+    }
+  } else if (mode === "simple") {
+    for (const [k, v] of Object.entries(SIMPLE_SWAPS)) {
+      text = text.replace(new RegExp(`\\b${k}\\b`, "gi"), v);
+    }
+  }
+  text = text.replace(/\s+([,.;:!?])/g, "$1").replace(/\s{2,}/g, " ").trim();
+  if (text && text[0] !== text[0].toUpperCase()) text = text[0].toUpperCase() + text.slice(1);
+  return text;
+}
+
+styleBtns.forEach((b) => {
+  b.addEventListener("click", () => {
+    const s = b.dataset.style;
+    if (activeStyles.has(s) && activeStyles.size > 1) {
+      activeStyles.delete(s); b.classList.remove("active");
+    } else {
+      activeStyles.add(s); b.classList.add("active");
+    }
+  });
+});
+
+rephraseBtn.addEventListener("click", async () => {
+  const selStart = editor.selectionStart, selEnd = editor.selectionEnd;
+  const text = (selEnd > selStart ? editor.value.slice(selStart, selEnd) : editor.value).trim();
+  if (!text) { rephraseResults.innerHTML = `<div class="empty">Type or select some text first.</div>`; return; }
+  if (text.length > 1500) {
+    rephraseResults.innerHTML = `<div class="empty">Text too long (${text.length} chars). Limit 1500.</div>`; return;
+  }
+
+  rephraseResults.innerHTML = `<div class="spinner">Rephrasing… (uses MyMemory open API)</div>`;
+  rephraseBtn.disabled = true;
+
+  const tasks = [...activeStyles].map(async (style) => {
+    const cfg = STYLES[style];
+    try {
+      let out = await backTranslate(text, cfg.pivots);
+      out = applyStylePost(out, cfg.post);
+      return { style, label: cfg.label, text: out, unchanged: out.toLowerCase() === text.toLowerCase() };
+    } catch (err) {
+      return { style, label: cfg.label, text: "", error: err.message };
+    }
+  });
+  const results = await Promise.all(tasks);
+
+  rephraseResults.innerHTML = "";
+  for (const r of results) {
+    const card = document.createElement("div");
+    let cls = "rephrase-card";
+    if (r.error) cls += " err"; else if (r.unchanged) cls += " unchanged";
+    card.className = cls;
+    card.innerHTML = `
+      <div class="style-label">${escapeHtml(r.label)}${r.unchanged ? " · no change" : ""}</div>
+      <div class="text">${escapeHtml(r.error ? `⚠ ${r.error}` : r.text)}</div>
+      ${r.error ? "" : `<div class="actions"><button data-act="replace">Replace</button><button data-act="copy">Copy</button></div>`}
+    `;
+    card.addEventListener("click", (e) => {
+      const act = e.target.closest("button")?.dataset.act;
+      if (act === "replace") {
+        if (selEnd > selStart) editor.setRangeText(r.text, selStart, selEnd, "end");
+        else editor.value = r.text;
+        editor.focus();
+        scheduleCheck(100);
+      } else if (act === "copy") {
+        navigator.clipboard.writeText(r.text).catch(() => {});
+        e.target.textContent = "Copied!";
+        setTimeout(() => (e.target.textContent = "Copy"), 1200);
+      }
+    });
+    rephraseResults.appendChild(card);
+  }
+  rephraseBtn.disabled = false;
+});
+
+// ============================================================================
+// Synonyms popup — Datamuse open API
+// ============================================================================
+function findWordAt(text, pos) {
+  if (pos < 0 || pos > text.length) return null;
+  const isW = (c) => /[A-Za-z'-]/.test(c || "");
+  let s = pos, e = pos;
+  if (!isW(text[s]) && s > 0 && isW(text[s - 1])) s--;
+  if (!isW(text[s])) return null;
+  while (s > 0 && isW(text[s - 1])) s--;
+  while (e < text.length && isW(text[e])) e++;
+  const word = text.slice(s, e).replace(/^[-']+|[-']+$/g, "");
+  return word ? { word, start: s, end: e } : null;
+}
+
+function showPopupNear(x, y) {
+  synonymPopup.classList.remove("hidden");
+  const r = synonymPopup.getBoundingClientRect();
+  synonymPopup.style.left = Math.min(x, window.innerWidth - r.width - 10) + "px";
+  synonymPopup.style.top = Math.min(y + 16, window.innerHeight - r.height - 10) + "px";
+}
+
+async function openSynonyms(word, x, y, range) {
+  popupWord.textContent = word;
+  popupBody.innerHTML = `<div class="spinner">Looking up…</div>`;
+  showPopupNear(x, y);
+  try {
+    const [synRes, mlRes] = await Promise.all([
+      fetch(`${DM_URL}?rel_syn=${encodeURIComponent(word.toLowerCase())}&max=12`),
+      fetch(`${DM_URL}?ml=${encodeURIComponent(word.toLowerCase())}&max=12`),
+    ]);
+    const syn = (await synRes.json()).map((w) => w.word);
+    const seen = new Set(syn);
+    const rel = (await mlRes.json())
+      .map((w) => w.word).filter((w) => w !== word.toLowerCase() && !seen.has(w)).slice(0, 8);
+    const chips = (arr) => arr.map((w) =>
+      `<span class="syn-chip" data-r="${escapeHtml(w)}">${escapeHtml(w)}</span>`).join("");
+    let html = "";
+    if (syn.length) html += `<span class="group-label">Synonyms</span>${chips(syn)}`;
+    if (rel.length) html += `<span class="group-label">Related</span>${chips(rel)}`;
+    if (!syn.length && !rel.length) html = `<div class="syn-empty">No synonyms found.</div>`;
+    popupBody.innerHTML = html;
+    popupBody.querySelectorAll(".syn-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const rep = chip.dataset.r;
+        const orig = editor.value.slice(range.start, range.end);
+        const cased = orig[0] === orig[0].toUpperCase()
+          ? rep[0].toUpperCase() + rep.slice(1) : rep;
+        editor.setRangeText(cased, range.start, range.end, "end");
+        synonymPopup.classList.add("hidden");
+        editor.focus(); scheduleCheck(100);
+      });
+    });
+  } catch (err) {
+    popupBody.innerHTML = `<div class="syn-empty">⚠ ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+editor.addEventListener("dblclick", (e) => {
+  const hit = findWordAt(editor.value, editor.selectionStart);
+  if (hit) openSynonyms(hit.word, e.clientX, e.clientY, hit);
+});
+popupClose.addEventListener("click", () => synonymPopup.classList.add("hidden"));
+document.addEventListener("click", (e) => {
+  if (!synonymPopup.contains(e.target) && e.target !== editor) synonymPopup.classList.add("hidden");
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") synonymPopup.classList.add("hidden"); });
+
+// ============================================================================
+// Hover tooltips for underlined issues
+// ============================================================================
+// Map char offset -> issue (first match wins). Rebuilt after every check.
+let issueIndex = [];
+
+function rebuildIssueIndex() {
+  issueIndex = [...state.grammar, ...state.style]
+    .slice()
+    .sort((a, b) => a.offset - b.offset || a.length - b.length);
+}
+
+function findIssueAtOffset(off) {
+  for (const m of issueIndex) {
+    if (off >= m.offset && off < m.offset + m.length) return m;
+  }
+  return null;
+}
+
+// Build a hidden mirror div that mimics the textarea's text layout so we can
+// measure pixel position of every character index.
+let mirror = null;
+function ensureMirror() {
+  if (mirror) return mirror;
+  mirror = document.createElement("div");
+  const cs = getComputedStyle(editor);
+  Object.assign(mirror.style, {
+    position: "absolute", visibility: "hidden", whiteSpace: "pre-wrap",
+    wordWrap: "break-word", top: "0", left: "-9999px",
+    font: cs.font, lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing,
+    padding: cs.padding, border: cs.border, boxSizing: cs.boxSizing,
+    width: editor.clientWidth + "px",
+  });
+  document.body.appendChild(mirror);
+  return mirror;
+}
+
+function offsetFromMouse(clientX, clientY) {
+  // Convert page coords to textarea-relative coords (accounting for scroll).
+  const r = editor.getBoundingClientRect();
+  const x = clientX - r.left + editor.scrollLeft;
+  const y = clientY - r.top + editor.scrollTop;
+  const m = ensureMirror();
+  m.style.width = editor.clientWidth + "px";
+
+  // Binary search the character index whose end position is closest to (x, y).
+  const text = editor.value;
+  let lo = 0, hi = text.length, best = 0, bestDist = Infinity;
+  // Coarse linear scan with step to keep it fast.
+  const step = Math.max(1, Math.floor(text.length / 200));
+  let candidates = [];
+  for (let i = 0; i <= text.length; i += step) candidates.push(i);
+  candidates.push(text.length);
+
+  // Find the candidate closest by line (y), then refine within that line.
+  let bestI = 0;
+  for (const i of candidates) {
+    m.textContent = text.slice(0, i) || "\u200b";
+    // Append a marker span at the end to measure its position.
+    const span = document.createElement("span");
+    span.textContent = "\u200b";
+    m.appendChild(span);
+    const sr = span.getBoundingClientRect();
+    const mr = m.getBoundingClientRect();
+    const cx = sr.left - mr.left;
+    const cy = sr.top - mr.top;
+    const d = Math.abs(cy - y) * 1000 + Math.abs(cx - x);
+    if (d < bestDist) { bestDist = d; bestI = i; }
+    m.removeChild(span);
+  }
+  // Refine ±step characters
+  const start = Math.max(0, bestI - step);
+  const end = Math.min(text.length, bestI + step);
+  for (let i = start; i <= end; i++) {
+    m.textContent = text.slice(0, i) || "\u200b";
+    const span = document.createElement("span");
+    span.textContent = "\u200b";
+    m.appendChild(span);
+    const sr = span.getBoundingClientRect();
+    const mr = m.getBoundingClientRect();
+    const cx = sr.left - mr.left;
+    const cy = sr.top - mr.top;
+    const d = Math.abs(cy - y) * 1000 + Math.abs(cx - x);
+    if (d < bestDist) { bestDist = d; best = i; }
+    m.removeChild(span);
+  }
+  return best || bestI;
+}
+
+let tooltipFor = null;
+function showTooltip(issue, clientX, clientY) {
+  if (!issue) { hideTooltip(); return; }
+  if (tooltipFor === issue) return;
+  tooltipFor = issue;
+  const sev = severityFor(issue);
+  const repls = (issue.replacements || []).slice(0, 6)
+    .map((r) => `<span class="tt-repl" data-r="${escapeHtml(r)}" data-o="${issue.offset}" data-l="${issue.length}">${escapeHtml(r)}</span>`)
+    .join("");
+  tooltip.className = `tooltip ${sev}`;
+  tooltip.innerHTML = `
+    <div class="tt-cat">${escapeHtml(issue.category || issue.type || "issue")}</div>
+    <div class="tt-msg">${escapeHtml(issue.message || "")}</div>
+    ${repls ? `<div class="tt-repls">${repls}</div>` : ""}
+  `;
+  tooltip.classList.remove("hidden");
+  const r = tooltip.getBoundingClientRect();
+  let left = clientX + 12;
+  let top = clientY + 16;
+  if (left + r.width > window.innerWidth - 8) left = window.innerWidth - r.width - 8;
+  if (top + r.height > window.innerHeight - 8) top = clientY - r.height - 10;
+  tooltip.style.left = Math.max(8, left) + "px";
+  tooltip.style.top = Math.max(8, top) + "px";
+}
+
+function hideTooltip() {
+  tooltipFor = null;
+  tooltip.classList.add("hidden");
+}
+
+tooltip.addEventListener("click", (e) => {
+  const chip = e.target.closest(".tt-repl");
+  if (!chip) return;
+  applyReplacement(+chip.dataset.o, +chip.dataset.l, chip.dataset.r);
+  hideTooltip();
+});
+tooltip.addEventListener("mouseleave", hideTooltip);
+
+let hoverTimer = null;
+editor.addEventListener("mousemove", (e) => {
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => {
+    if (!issueIndex.length) { hideTooltip(); return; }
+    const off = offsetFromMouse(e.clientX, e.clientY);
+    const issue = findIssueAtOffset(off);
+    if (issue) showTooltip(issue, e.clientX, e.clientY);
+    else if (!tooltip.matches(":hover")) hideTooltip();
+  }, 80);
+});
+editor.addEventListener("mouseleave", () => {
+  setTimeout(() => { if (!tooltip.matches(":hover")) hideTooltip(); }, 150);
+});
+
+// Rebuild index whenever results change — hook into runCheck and renderSuggestionList
+const _origRun = runCheck;
+runCheck = async function () {
+  await _origRun();
+  rebuildIssueIndex();
+};
+
+// Rebuild index whenever results change — hook into runCheck and renderSuggestionList
+const _origRun = runCheck;
+runCheck = async function () {
+  await _origRun();
+  rebuildIssueIndex();
+};
+
+// ============================================================================
+// Init
+// ============================================================================
+renderSuggestionList(grammarList, [], { emptyMsg: "Start typing to see grammar suggestions." });
+renderSuggestionList(styleList, [], { emptyMsg: "Start typing to see style suggestions." });
+renderMetrics({});
+
+// Engine toggle
+const engineBtn = document.getElementById("engineBtn");
+refreshEngineButton();
+engineBtn.addEventListener("click", () => {
+  if (ltConfig.mode === "local") {
+    if (confirm("Switch back to the free public LanguageTool API?")) {
+      ltConfig = { mode: "public" };
+    } else return;
+  } else {
+    const url = prompt(
+      "Enter your local LanguageTool URL.\n\nExample: " + LT_LOCAL_DEFAULT +
+      "\n\nLeave empty to cancel. Start the local server first (see start-languagetool.bat).",
+      ltConfig.url || LT_LOCAL_DEFAULT
+    );
+    if (!url) return;
+    ltConfig = { mode: "local", url: url.trim() };
+  }
+  localStorage.setItem("ltConfig", JSON.stringify(ltConfig));
+  refreshEngineButton();
+  if (editor.value) runCheck();
+});
+
+editor.value =
+  "This is a example sentence which was wrote to demonstrate how the tool works. " +
+  "In order to make a decision about whether or not to use it, you should literally just try it out. " +
+  "The cake was eaten by the children very quickly.";
+runCheck();
+</script>
+</body>
+</html>

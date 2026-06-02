@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Grammar &amp; Writing Enhancer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Grammar &amp; Writing Enhancer</h1>
+    <p class="subtitle">
+      Local app powered by
+      <a href="https://languagetool.org/" target="_blank" rel="noopener">LanguageTool</a>
+      (open source) + custom style heuristics.
+    </p>
+  </header>
+
+  <main>
+    <section class="editor-pane">
+      <div class="toolbar">
+        <button id="checkBtn" class="primary">Check now</button>
+        <label class="switch">
+          <input type="checkbox" id="autoCheck" checked />
+          <span>Auto-check while typing</span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="picky" checked />
+          <span>Picky mode (stricter style)</span>
+        </label>
+        <select id="language" title="Language">
+          <option value="en-US" selected>English (US)</option>
+          <option value="en-GB">English (UK)</option>
+          <option value="en-IN">English (India)</option>
+          <option value="en-AU">English (AU)</option>
+          <option value="en-CA">English (CA)</option>
+        </select>
+        <button id="clearBtn">Clear</button>
+        <span id="status" class="status"></span>
+      </div>
+
+      <div class="editor-wrap">
+        <div id="highlights" class="highlights" aria-hidden="true"></div>
+        <textarea
+          id="editor"
+          placeholder="Paste or type any English sentence or paragraph here. Suggestions appear on the right…"
+          spellcheck="false"
+        ></textarea>
+      </div>
+
+      <div class="metrics" id="metrics">
+        <span class="metric"><b id="m-words">0</b> words</span>
+        <span class="metric"><b id="m-sent">0</b> sentences</span>
+        <span class="metric"><b id="m-avg">0</b> avg w/s</span>
+        <span class="metric"><b id="m-ease">0</b> reading ease</span>
+        <span class="metric"><b id="m-grade">0</b> grade level</span>
+        <span class="metric" id="m-level">—</span>
+      </div>
+    </section>
+
+    <aside class="sidebar">
+      <div class="tabs">
+        <button class="tab active" data-tab="grammar">
+          Grammar <span id="grammarCount" class="badge">0</span>
+        </button>
+        <button class="tab" data-tab="style">
+          Style <span id="styleCount" class="badge">0</span>
+        </button>
+        <button class="tab" data-tab="rephrase">
+          Rephrase
+        </button>
+      </div>
+      <div id="grammarList" class="suggestions"></div>
+      <div id="styleList" class="suggestions hidden"></div>
+      <div id="rephrasePanel" class="suggestions hidden">
+        <div class="style-bar">
+          <button class="style-btn active" data-style="standard">Standard</button>
+          <button class="style-btn" data-style="fluent">Fluent</button>
+          <button class="style-btn" data-style="formal">Formal</button>
+          <button class="style-btn" data-style="simple">Simple</button>
+          <button class="style-btn" data-style="creative">Creative</button>
+        </div>
+        <button id="rephraseBtn" class="primary full">Rephrase selection or full text</button>
+        <p class="hint">Tip: select text in the editor first, or leave it empty to rephrase the entire text. Double-click any word for synonyms.</p>
+        <div id="rephraseResults"></div>
+      </div>
+    </aside>
+  </main>
+
+  <div id="synonymPopup" class="popup hidden">
+    <div class="popup-head">
+      <span id="popupWord"></span>
+      <button id="popupClose" title="Close">×</button>
+    </div>
+    <div id="popupBody" class="popup-body">Loading…</div>
+  </div>
+
+  <footer>
+    <small>
+      Sources:
+      <a href="https://github.com/languagetool-org/languagetool" target="_blank" rel="noopener">LanguageTool</a> ·
+      <a href="https://github.com/btford/write-good" target="_blank" rel="noopener">write-good</a> ·
+      Flesch–Kincaid readability formulas
+    </small>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
