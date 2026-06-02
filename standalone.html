@@ -268,6 +268,20 @@ let ltConfig = (() => {
   try { return JSON.parse(localStorage.getItem("ltConfig")) || {}; }
   catch { return {}; }
 })();
+
+// Safety: if the page is loaded over HTTPS but the saved local URL is HTTP
+// (e.g. http://localhost:8081), the browser blocks the call as "mixed content".
+// Reset to public in that case and warn the user.
+let ltAutoReverted = false;
+if (
+  ltConfig.mode === "local" &&
+  location.protocol === "https:" &&
+  (ltConfig.url || "").startsWith("http://")
+) {
+  ltAutoReverted = true;
+  ltConfig = { mode: "public" };
+  try { localStorage.setItem("ltConfig", JSON.stringify(ltConfig)); } catch {}
+}
 function ltUrl() {
   if (ltConfig.mode === "local") return ltConfig.url || LT_LOCAL_DEFAULT;
   return LT_PUBLIC;
@@ -929,12 +943,23 @@ renderMetrics({});
 // Engine toggle
 const engineBtn = document.getElementById("engineBtn");
 refreshEngineButton();
+if (ltAutoReverted) {
+  statusEl.textContent = "Note: switched to Public engine (HTTPS page can't reach http://localhost).";
+  statusEl.className = "status";
+}
 engineBtn.addEventListener("click", () => {
   if (ltConfig.mode === "local") {
     if (confirm("Switch back to the free public LanguageTool API?")) {
       ltConfig = { mode: "public" };
     } else return;
   } else {
+    if (location.protocol === "https:") {
+      alert(
+        "This page is loaded over HTTPS, so the browser will block calls to a local http:// server.\n\n" +
+        "To use Local engine, open the standalone.html file directly from your PC (file:// or http://localhost) instead of the GitHub Pages URL."
+      );
+      return;
+    }
     const url = prompt(
       "Enter your local LanguageTool URL.\n\nExample: " + LT_LOCAL_DEFAULT +
       "\n\nLeave empty to cancel. Start the local server first (see start-languagetool.bat).",
