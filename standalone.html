@@ -922,20 +922,6 @@ editor.addEventListener("mouseleave", () => {
   setTimeout(() => { if (!tooltip.matches(":hover")) hideTooltip(); }, 150);
 });
 
-// Rebuild index whenever results change — hook into runCheck and renderSuggestionList
-const _origRun = runCheck;
-runCheck = async function () {
-  await _origRun();
-  rebuildIssueIndex();
-};
-
-// Rebuild index whenever results change — hook into runCheck and renderSuggestionList
-const _origRun = runCheck;
-runCheck = async function () {
-  await _origRun();
-  rebuildIssueIndex();
-};
-
 // ============================================================================
 // Init
 // ============================================================================
