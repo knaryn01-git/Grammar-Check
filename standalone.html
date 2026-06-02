@@ -38,6 +38,9 @@
   button.primary { background:linear-gradient(90deg,var(--accent),#5b8cff); border-color:transparent;
     color:white; font-weight:600; }
   button.primary:hover { filter:brightness(1.1); }
+  button.primary.ready { background:linear-gradient(90deg,var(--ok),#22c55e); color:#0a0c14;
+    box-shadow:0 0 0 2px rgba(74,222,128,.18); }
+  button.primary.ready:hover { filter:brightness(1.05); }
   button.full { width:100%; }
   select { background:var(--panel); color:var(--text); border:1px solid var(--border);
     border-radius:8px; padding:6px 10px; font-size:13px; }
@@ -1183,10 +1186,35 @@ engineBtn.addEventListener("click", () => {
   if (editor.value) runCheck();
 });
 
-editor.value =
-  "This is a example sentence which was wrote to demonstrate how the tool works. " +
-  "In order to make a decision about whether or not to use it, you should literally just try it out. " +
-  "The cake was eaten by the children very quickly.";
+editor.value = "";
+
+// ============================================================================
+// Readiness probe — mark "Check now" green when the grammar API is reachable
+// ============================================================================
+async function pingGrammarApi() {
+  checkBtn.classList.remove("ready");
+  checkBtn.title = "Checking API\u2026";
+  if (!navigator.onLine) {
+    checkBtn.title = "Offline \u2014 grammar API unreachable.";
+    return;
+  }
+  try {
+    const base = ltUrl().replace(/\/check$/, "");
+    const res = await fetch(`${base}/languages`, { method: "GET" });
+    if (res.ok) {
+      checkBtn.classList.add("ready");
+      checkBtn.title = "Online and ready.";
+    } else {
+      checkBtn.title = `Grammar API responded ${res.status}.`;
+    }
+  } catch (e) {
+    checkBtn.title = `Grammar API unreachable: ${e.message}`;
+  }
+}
+pingGrammarApi();
+window.addEventListener("online", pingGrammarApi);
+window.addEventListener("offline", pingGrammarApi);
+document.getElementById("engineBtn").addEventListener("click", () => setTimeout(pingGrammarApi, 50), true);
 
 // ============================================================================
 // API usage tracker (rolling 24h window, persisted in localStorage)
