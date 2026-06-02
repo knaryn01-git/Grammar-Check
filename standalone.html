@@ -110,6 +110,18 @@
   .rephrase-card .actions button { font-size:12px; padding:4px 10px; }
   .spinner { text-align:center; padding:18px; color:var(--muted); font-size:13px; }
 
+  /* Translate panel */
+  .translate-row { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .translate-row label { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px; flex:1; }
+  .translate-row select { flex:1; padding:5px 8px; font-size:12.5px; }
+  .translate-row button#trSwap { padding:5px 10px; font-size:15px; }
+  .translate-card { padding:12px 14px; margin-top:10px; border:1px solid var(--border);
+    border-left:3px solid var(--accent); border-radius:8px; background:var(--panel-2); }
+  .translate-card.err { border-left-color:var(--err); }
+  .translate-card .text { font-size:14.5px; line-height:1.55; white-space:pre-wrap; }
+  .translate-card .actions { display:flex; gap:6px; margin-top:8px; }
+  .translate-card .actions button { font-size:12px; padding:4px 10px; }
+
   .popup { position:fixed; z-index:100; min-width:220px; max-width:320px;
     background:var(--panel-2); border:1px solid var(--border); border-radius:10px;
     box-shadow:var(--shadow); overflow:hidden; }
@@ -186,6 +198,11 @@
       <span class="metric"><b id="m-ease">0</b> reading ease</span>
       <span class="metric"><b id="m-grade">0</b> grade level</span>
       <span class="metric" id="m-level">—</span>
+      <span class="metric"><b id="m-read">0s</b> read time</span>
+      <span class="metric"><b id="m-long">0</b> longest</span>
+      <span class="metric"><b id="m-short">0</b> shortest</span>
+      <span class="metric"><b id="m-unique">0%</b> unique</span>
+      <span class="metric" id="m-tone">Tone: —</span>
     </div>
   </section>
 
@@ -194,6 +211,7 @@
       <button class="tab active" data-tab="grammar">Grammar <span id="grammarCount" class="badge">0</span></button>
       <button class="tab" data-tab="style">Style <span id="styleCount" class="badge">0</span></button>
       <button class="tab" data-tab="rephrase">Rephrase</button>
+      <button class="tab" data-tab="translate">Translate</button>
     </div>
     <div id="grammarList" class="suggestions"></div>
     <div id="styleList" class="suggestions hidden"></div>
@@ -208,6 +226,16 @@
       <button id="rephraseBtn" class="primary full">Rephrase selection or full text</button>
       <p class="hint">Select text first, or leave nothing selected to rephrase the whole editor. Double-click a word for synonyms.</p>
       <div id="rephraseResults"></div>
+    </div>
+    <div id="translatePanel" class="suggestions hidden">
+      <div class="translate-row">
+        <label>From <select id="trFrom"></select></label>
+        <button id="trSwap" title="Swap languages">⇄</button>
+        <label>To <select id="trTo"></select></label>
+      </div>
+      <button id="translateBtn" class="primary full">Translate selection or full text</button>
+      <p class="hint">Selection translated if any, otherwise the whole editor. Uses MyMemory open API.</p>
+      <div id="translateResult"></div>
     </div>
   </aside>
 </main>
@@ -249,6 +277,17 @@ const rephrasePanel = document.getElementById("rephrasePanel");
 const rephraseBtn = document.getElementById("rephraseBtn");
 const rephraseResults = document.getElementById("rephraseResults");
 const styleBtns = document.querySelectorAll(".style-btn");
+const translatePanel = document.getElementById("translatePanel");
+const translateBtn = document.getElementById("translateBtn");
+const translateResult = document.getElementById("translateResult");
+const trFrom = document.getElementById("trFrom");
+const trTo = document.getElementById("trTo");
+const trSwap = document.getElementById("trSwap");
+const mRead = document.getElementById("m-read");
+const mLong = document.getElementById("m-long");
+const mShort = document.getElementById("m-short");
+const mUnique = document.getElementById("m-unique");
+const mTone = document.getElementById("m-tone");
 const synonymPopup = document.getElementById("synonymPopup");
 const popupWord = document.getElementById("popupWord");
 const popupBody = document.getElementById("popupBody");
@@ -309,6 +348,7 @@ document.querySelectorAll(".tab").forEach((t) => {
     grammarList.classList.toggle("hidden", w !== "grammar");
     styleList.classList.toggle("hidden", w !== "style");
     rephrasePanel.classList.toggle("hidden", w !== "rephrase");
+    translatePanel.classList.toggle("hidden", w !== "translate");
   });
 });
 
@@ -440,14 +480,41 @@ function runStyleChecks(text) {
       message:`Adverb “${m[1]}” — strong verbs often work better.`, replacements:[] });
   }
   let pos = 0;
+  const sentenceStarts = [];
   for (const s of text.split(SENT_SPLIT)) {
-    const wc = s.trim().split(/\s+/).filter(Boolean).length;
+    const trimmed = s.trim();
+    const wc = trimmed.split(/\s+/).filter(Boolean).length;
     if (wc >= 25) {
       out.push({ type:"long-sentence", offset:pos, length:s.length,
         message:`Long sentence (${wc} words) — consider splitting.`, replacements:[] });
     }
+    // Track first word of each sentence for variety check
+    const firstMatch = trimmed.match(/^[A-Za-z']+/);
+    if (firstMatch) sentenceStarts.push({ word: firstMatch[0].toLowerCase(), offset: pos + s.indexOf(firstMatch[0]), length: firstMatch[0].length });
     pos += s.length + 1;
   }
+
+  // Repeated consecutive words: "the the", "to to", "is is" — case-insensitive
+  const REPEAT_RE = /\b([A-Za-z]+)\s+\1\b/gi;
+  REPEAT_RE.lastIndex = 0;
+  while ((m = REPEAT_RE.exec(text)) !== null) {
+    out.push({ type:"repeated-word", offset:m.index, length:m[0].length,
+      message:`Repeated word “${m[1]}” — likely a typo.`,
+      replacements: [m[1]] });
+  }
+
+  // Sentence-variety: 3+ consecutive sentences starting with the same word
+  for (let i = 2; i < sentenceStarts.length; i++) {
+    const a = sentenceStarts[i - 2], b = sentenceStarts[i - 1], c = sentenceStarts[i];
+    // Skip common starters that are hard to vary
+    const skip = new Set(["i","the","a","an","it","this","that","there","you","we","they","he","she"]);
+    if (a.word === b.word && b.word === c.word && !skip.has(a.word)) {
+      out.push({ type:"sentence-variety", offset:c.offset, length:c.length,
+        message:`3 sentences in a row start with “${c.word}” — try varying the opener.`,
+        replacements:[] });
+    }
+  }
+
   out.sort((a,b) => a.offset - b.offset || a.length - b.length);
   return out;
 }
@@ -474,7 +541,8 @@ function computeMetrics(text) {
   const syl = words.reduce((s, w) => s + countSyllables(w), 0);
   if (!words.length || !sentences.length) {
     return { words:words.length, sentences:sentences.length,
-      avgWordsPerSentence:0, fleschReadingEase:0, fleschKincaidGrade:0, readingLevel:"—" };
+      avgWordsPerSentence:0, fleschReadingEase:0, fleschKincaidGrade:0, readingLevel:"—",
+      readTime:"0s", longestSentence:0, shortestSentence:0, uniquePct:0, tone:"—" };
   }
   const aw = words.length / sentences.length;
   const asw = syl / words.length;
@@ -488,12 +556,38 @@ function computeMetrics(text) {
   else if (flesch >= 50) level = "Fairly difficult (10th–12th)";
   else if (flesch >= 30) level = "Difficult (college)";
   else level = "Very difficult (college grad)";
+
+  // Reading time: 225 wpm average adult silent reading
+  const secs = Math.max(1, Math.round((words.length / 225) * 60));
+  const readTime = secs >= 60 ? `${Math.floor(secs/60)}m ${secs%60}s` : `${secs}s`;
+
+  // Sentence stats
+  const sentLens = sentences.map((s) => s.trim().split(/\s+/).filter(Boolean).length);
+  const longestSentence = Math.max(...sentLens);
+  const shortestSentence = Math.min(...sentLens);
+
+  // Unique-word ratio (lowercase, dedup)
+  const uniqueWords = new Set(words.map((w) => w.toLowerCase()));
+  const uniquePct = Math.round((uniqueWords.size / words.length) * 100);
+
+  // Simple tone heuristic
+  const lower = text.toLowerCase();
+  const contractions = (lower.match(/\b(?:can't|won't|don't|i'm|you're|it's|that's|i'll|we'll|gonna|wanna|kinda)\b/g) || []).length;
+  const exclaims = (text.match(/!/g) || []).length;
+  const longWords = words.filter((w) => w.length >= 8).length;
+  const longWordPct = longWords / words.length;
+  let tone;
+  if (contractions + exclaims >= Math.max(2, sentences.length * 0.4) || longWordPct < 0.10) tone = "Casual";
+  else if (longWordPct > 0.22 && aw > 18 && contractions === 0) tone = "Formal";
+  else tone = "Balanced";
+
   return {
     words: words.length, sentences: sentences.length,
     avgWordsPerSentence: Math.round(aw * 10) / 10,
     fleschReadingEase: Math.round(flesch * 10) / 10,
     fleschKincaidGrade: Math.round(fk * 10) / 10,
     readingLevel: level,
+    readTime, longestSentence, shortestSentence, uniquePct, tone,
   };
 }
 
@@ -504,6 +598,11 @@ function renderMetrics(m) {
   mEase.textContent = m.fleschReadingEase ?? 0;
   mGrade.textContent = m.fleschKincaidGrade ?? 0;
   mLevel.textContent = m.readingLevel ?? "—";
+  mRead.textContent = m.readTime ?? "0s";
+  mLong.textContent = m.longestSentence ?? 0;
+  mShort.textContent = m.shortestSentence ?? 0;
+  mUnique.textContent = (m.uniquePct ?? 0) + "%";
+  mTone.textContent = "Tone: " + (m.tone ?? "—");
 }
 
 // ============================================================================
@@ -710,6 +809,86 @@ rephraseBtn.addEventListener("click", async () => {
     rephraseResults.appendChild(card);
   }
   rephraseBtn.disabled = false;
+});
+
+// ============================================================================
+// Translate — MyMemory open API (100+ languages)
+// ============================================================================
+const TR_LANGS = [
+  ["en","English"], ["es","Spanish"], ["fr","French"], ["de","German"], ["it","Italian"],
+  ["pt","Portuguese"], ["nl","Dutch"], ["pl","Polish"], ["ru","Russian"], ["uk","Ukrainian"],
+  ["tr","Turkish"], ["ar","Arabic"], ["he","Hebrew"], ["fa","Persian"],
+  ["hi","Hindi"], ["bn","Bengali"], ["ta","Tamil"], ["te","Telugu"], ["ml","Malayalam"],
+  ["kn","Kannada"], ["mr","Marathi"], ["gu","Gujarati"], ["pa","Punjabi"], ["ur","Urdu"],
+  ["zh-CN","Chinese (Simplified)"], ["zh-TW","Chinese (Traditional)"],
+  ["ja","Japanese"], ["ko","Korean"], ["vi","Vietnamese"], ["th","Thai"], ["id","Indonesian"],
+  ["ms","Malay"], ["fil","Filipino"], ["sv","Swedish"], ["no","Norwegian"], ["da","Danish"],
+  ["fi","Finnish"], ["el","Greek"], ["cs","Czech"], ["hu","Hungarian"], ["ro","Romanian"],
+  ["bg","Bulgarian"], ["sr","Serbian"], ["hr","Croatian"], ["sk","Slovak"], ["sl","Slovenian"],
+  ["lt","Lithuanian"], ["lv","Latvian"], ["et","Estonian"], ["is","Icelandic"], ["ga","Irish"],
+  ["cy","Welsh"], ["sw","Swahili"], ["af","Afrikaans"], ["sq","Albanian"], ["az","Azerbaijani"],
+  ["eu","Basque"], ["ca","Catalan"], ["gl","Galician"], ["la","Latin"], ["mt","Maltese"],
+];
+function populateLangs() {
+  for (const [code, name] of TR_LANGS) {
+    trFrom.appendChild(new Option(name, code));
+    trTo.appendChild(new Option(name, code));
+  }
+  trFrom.value = localStorage.getItem("trFrom") || "en";
+  trTo.value = localStorage.getItem("trTo") || "es";
+}
+populateLangs();
+trFrom.addEventListener("change", () => localStorage.setItem("trFrom", trFrom.value));
+trTo.addEventListener("change", () => localStorage.setItem("trTo", trTo.value));
+trSwap.addEventListener("click", () => {
+  const a = trFrom.value; trFrom.value = trTo.value; trTo.value = a;
+  localStorage.setItem("trFrom", trFrom.value);
+  localStorage.setItem("trTo", trTo.value);
+});
+
+translateBtn.addEventListener("click", async () => {
+  const selStart = editor.selectionStart, selEnd = editor.selectionEnd;
+  const text = (selEnd > selStart ? editor.value.slice(selStart, selEnd) : editor.value).trim();
+  if (!text) { translateResult.innerHTML = `<div class="empty">Type or select some text first.</div>`; return; }
+  if (trFrom.value === trTo.value) {
+    translateResult.innerHTML = `<div class="empty">Source and target languages are the same.</div>`; return;
+  }
+  if (text.length > 500) {
+    translateResult.innerHTML = `<div class="empty">MyMemory free tier accepts up to 500 chars per call. Select less text.</div>`; return;
+  }
+  translateResult.innerHTML = `<div class="spinner">Translating ${trFrom.options[trFrom.selectedIndex].text} → ${trTo.options[trTo.selectedIndex].text}…</div>`;
+  translateBtn.disabled = true;
+  try {
+    const out = await translate(text, trFrom.value, trTo.value);
+    const card = document.createElement("div");
+    card.className = "translate-card";
+    card.innerHTML = `
+      <div class="text">${escapeHtml(out)}</div>
+      <div class="actions">
+        <button data-act="replace">Replace</button>
+        <button data-act="copy">Copy</button>
+      </div>
+    `;
+    card.addEventListener("click", (e) => {
+      const act = e.target.closest("button")?.dataset.act;
+      if (act === "replace") {
+        if (selEnd > selStart) editor.setRangeText(out, selStart, selEnd, "end");
+        else editor.value = out;
+        editor.focus();
+        scheduleCheck(100);
+      } else if (act === "copy") {
+        navigator.clipboard.writeText(out).catch(() => {});
+        e.target.textContent = "Copied!";
+        setTimeout(() => (e.target.textContent = "Copy"), 1200);
+      }
+    });
+    translateResult.innerHTML = "";
+    translateResult.appendChild(card);
+  } catch (err) {
+    translateResult.innerHTML = `<div class="translate-card err"><div class="text">⚠ ${escapeHtml(err.message)}</div></div>`;
+  } finally {
+    translateBtn.disabled = false;
+  }
 });
 
 // ============================================================================
